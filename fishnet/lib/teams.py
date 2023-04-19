@@ -60,10 +60,10 @@ class Teams:
 
     @staticmethod
     def check_team_leader(team_name, username):
-        if Team.objects.filter(name=team_name).exists():
-            if Team.objects.get(name=team_name).leader == username:
-                return True
-        return False
+        return bool(
+            Team.objects.filter(name=team_name).exists()
+            and Team.objects.get(name=team_name).leader == username
+        )
 
     @staticmethod
     def create_team(name, purpose, users, leader):

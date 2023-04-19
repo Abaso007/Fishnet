@@ -56,10 +56,7 @@ class FishnetPlugin(Plugin, Projects, Storage):
                     )
 
         for session in sessions_db.all():
-            if sessions:
-                if session.session not in sessions:
-                    sessions_db.filter(session=session.session).delete()
-            else:
+            if sessions and session.session not in sessions or not sessions:
                 sessions_db.filter(session=session.session).delete()
 
     def execute(self, session_id, command):
@@ -84,10 +81,7 @@ class FishnetPlugin(Plugin, Projects, Storage):
         project_uuid = args['project_uuid']
         hosts_db = self.hosts_db()
 
-        while True:
-            if not self.check_project_running(project_uuid):
-                break
-
+        while self.check_project_running(project_uuid):
             hosts = hosts_db.filter(project=project_uuid)
 
             for host in hosts:

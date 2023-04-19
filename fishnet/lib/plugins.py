@@ -44,7 +44,7 @@ class Plugins:
             for dest, _, files in os.walk(plugins_path):
                 for file in files:
                     if file.endswith('py'):
-                        plugin = dest + '/' + file
+                        plugin = f'{dest}/{file}'
 
                         try:
                             spec = importlib.util.spec_from_file_location(plugin, plugin)
@@ -59,7 +59,7 @@ class Plugins:
                                     plugins[plugin_name] = {}
 
                                 plugins[plugin_name]['plugin'] = plugin_object
-                                plugins[plugin_name]['logo'] = os.path.split(dest)[1] + '/plugin.png'
+                                plugins[plugin_name]['logo'] = f'{os.path.split(dest)[1]}/plugin.png'
 
                         except Exception as e:
                             print(f"Failed to load {file[:-3]} plugin, error: ({str(e)})!")

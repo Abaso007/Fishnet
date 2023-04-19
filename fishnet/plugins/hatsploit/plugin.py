@@ -66,10 +66,7 @@ class FishnetPlugin(Plugin, Projects, Storage, Sessions):
                     )
 
         for session in sessions_db.all():
-            if sessions:
-                if session.session not in sessions:
-                    sessions_db.filter(session=session.session).delete()
-            else:
+            if sessions and session.session not in sessions or not sessions:
                 sessions_db.filter(session=session.session).delete()
 
     def execute(self, session_id, command):
@@ -145,22 +142,13 @@ class FishnetPlugin(Plugin, Projects, Storage, Sessions):
         self.runtime.update()
 
         options = self.modules.get_current_module().options
-        payload = self.hsf_payloads.get_current_payload()
-
-        if payload:
+        if payload := self.hsf_payloads.get_current_payload():
             options.update(payload.options)
 
-        result = {}
-
-        for option in options:
-            result.update({
-                option: [
-                    options[option]['Value'],
-                    options[option]['Description']
-                ]
-            })
-
-        return result
+        return {
+            option: [options[option]['Value'], options[option]['Description']]
+            for option in options
+        }
 
     def attack(self, flaw):
         self.disable_auto_interaction()
@@ -223,30 +211,32 @@ class FishnetPlugin(Plugin, Projects, Storage, Sessions):
                     else:
                         result = self.runtime.catch(self.modules.check_current_module)
 
-                        if 'PORT' in module.options:
-                            if module.options['PORT']['Value'] is not None:
-                                port = int(module.options['PORT']['Value'])
+                        if (
+                            'PORT' in module.options
+                            and module.options['PORT']['Value'] is not None
+                        ):
+                            port = int(module.options['PORT']['Value'])
 
-                                try:
-                                    service = socket.getservbyport(port)
-                                except Exception:
-                                    service = 'unidentified'
+                            try:
+                                service = socket.getservbyport(port)
+                            except Exception:
+                                service = 'unidentified'
 
-                                if result and result is not Exception:
-                                    flaws_db.update_or_create(
-                                        project=project_uuid,
-                                        plugin=self.details['Name'],
-                                        name=module.details['Name'],
-                                        host=host.host,
-                                        port=port,
+                            if result and result is not Exception:
+                                flaws_db.update_or_create(
+                                    project=project_uuid,
+                                    plugin=self.details['Name'],
+                                    name=module.details['Name'],
+                                    host=host.host,
+                                    port=port,
 
-                                        defaults={
-                                            'rank': module.details['Rank'],
-                                            'family': module.details['Platform'],
-                                            'service': service,
-                                            'exploitable': True
-                                        }
-                                    )
+                                    defaults={
+                                        'rank': module.details['Rank'],
+                                        'family': module.details['Platform'],
+                                        'service': service,
+                                        'exploitable': True
+                                    }
+                                )
     
     def run(self, args):
         project_uuid = args['project_uuid']

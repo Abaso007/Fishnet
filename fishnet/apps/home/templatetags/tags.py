@@ -30,8 +30,4 @@ register = template.Library()
 
 @register.simple_tag
 def get_teams():
-    teams = Team.objects.all()
-
-    if teams:
-        return Team.objects.all()
-    return [None]
+    return Team.objects.all() if (teams := Team.objects.all()) else [None]

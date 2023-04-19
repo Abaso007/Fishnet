@@ -85,21 +85,22 @@ class Network:
         :return None: None
         """
 
-        if project_uuid in self.jobs:
-            for scanner in list(self.jobs[project_uuid]):
-                for iface in list(self.jobs[project_uuid][scanner]):
-                    job = self.jobs[project_uuid][scanner][iface]
+        if project_uuid not in self.jobs:
+            return
+        for scanner in list(self.jobs[project_uuid]):
+            for iface in list(self.jobs[project_uuid][scanner]):
+                job = self.jobs[project_uuid][scanner][iface]
 
-                    if job.is_alive():
-                        exc = ctypes.py_object(SystemExit)
-                        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(job.ident), exc)
+                if job.is_alive():
+                    exc = ctypes.py_object(SystemExit)
+                    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(job.ident), exc)
 
-                        if res > 1:
-                            ctypes.pythonapi.PyThreadState_SetAsyncExc(job.ident, None)
-                            return
+                    if res > 1:
+                        ctypes.pythonapi.PyThreadState_SetAsyncExc(job.ident, None)
+                        return
 
-                self.jobs[project_uuid].pop(scanner)
-            self.jobs.pop(project_uuid)
+            self.jobs[project_uuid].pop(scanner)
+        self.jobs.pop(project_uuid)
 
     def start_scan(self, project_uuid: str, scanners: list, gateway: str = '', cycle: bool = True) -> None:
         """ Start network scanner.
@@ -114,16 +115,16 @@ class Network:
         local_gateways = self.net.get_gateways()
 
         if gateway:
-            gateways = {}
             number = 0
 
-            for iface in local_gateways:
-                if local_gateways[iface] in gateway.split():
-                    gateways.update({iface: local_gateways[iface]})
-
+            gateways = {
+                iface: local_gateways[iface]
+                for iface in local_gateways
+                if local_gateways[iface] in gateway.split()
+            }
             for gtw in gateway.split():
                 if gtw not in gateways.values():
-                    gateways.update({f'fnet{str(number)}': gtw})
+                    gateways[f'fnet{str(number)}'] = gtw
                     number += 1
         else:
             gateways = local_gateways
@@ -158,9 +159,13 @@ class Network:
                         self.jobs[project_uuid][scanner][iface].setDaemon(True)
                         self.jobs[project_uuid][scanner][iface].start()
 
-                        while True:
-                            if iface in [network.iface for network in NetworkDB.objects.filter(project=project_uuid)]:
-                                break
+                        while iface not in [
+                            network.iface
+                            for network in NetworkDB.objects.filter(
+                                project=project_uuid
+                            )
+                        ]:
+                            pass
 
     def scan_thread(self, project_uuid: str, scanner: str, gateway: str,
                     iface: str, method: str, cycle: bool) -> None:
@@ -207,16 +212,19 @@ class Network:
         if flaws.filter(name=flaw).exists():
             flaw_object = flaws.get(name=flaw)
 
-            if flaw_object.exploitable:
-                if flaw_object.plugin in plugins:
-                    if hasattr(self.scanners[flaw_object.plugin]['plugin'], 'set'):
-                        self.scanners[flaw_object.plugin]['plugin'].set(flaw, option, value)
+            if (
+                flaw_object.exploitable
+                and flaw_object.plugin in plugins
+                and hasattr(self.scanners[flaw_object.plugin]['plugin'], 'set')
+            ):
+                self.scanners[flaw_object.plugin]['plugin'].set(flaw, option, value)
         else:
             for scanner in self.scanners:
-                if scanner in plugins:
-                    if hasattr(self.scanners[scanner]['plugin'], 'set'):
-                        self.scanners[scanner]['plugin'].set(flaw, option, value)
-                        break
+                if scanner in plugins and hasattr(
+                    self.scanners[scanner]['plugin'], 'set'
+                ):
+                    self.scanners[scanner]['plugin'].set(flaw, option, value)
+                    break
 
     def get_payloads(self, project_uuid: str, flaw: str) -> list:
         """ Get all flaw payloads.
@@ -234,15 +242,20 @@ class Network:
         if flaws.filter(name=flaw).exists():
             flaw_object = flaws.get(name=flaw)
 
-            if flaw_object.exploitable:
-                if flaw_object.plugin in plugins:
-                    if hasattr(self.scanners[flaw_object.plugin]['plugin'], 'payloads'):
-                        payloads += self.scanners[flaw_object.plugin]['plugin'].payloads(flaw)
+            if (
+                flaw_object.exploitable
+                and flaw_object.plugin in plugins
+                and hasattr(
+                    self.scanners[flaw_object.plugin]['plugin'], 'payloads'
+                )
+            ):
+                payloads += self.scanners[flaw_object.plugin]['plugin'].payloads(flaw)
         else:
             for scanner in self.scanners:
-                if scanner in plugins:
-                    if hasattr(self.scanners[scanner]['plugin'], 'payloads'):
-                        payloads += self.scanners[scanner]['plugin'].payloads(flaw)
+                if scanner in plugins and hasattr(
+                    self.scanners[scanner]['plugin'], 'payloads'
+                ):
+                    payloads += self.scanners[scanner]['plugin'].payloads(flaw)
 
         return payloads
 
@@ -260,15 +273,18 @@ class Network:
         if flaws.filter(name=flaw).exists():
             flaw_object = flaws.get(name=flaw)
 
-            if flaw_object.exploitable:
-                if flaw_object.plugin in plugins:
-                    if hasattr(self.scanners[flaw_object.plugin]['plugin'], 'attack'):
-                        return self.scanners[flaw_object.plugin]['plugin'].attack(flaw)
+            if (
+                flaw_object.exploitable
+                and flaw_object.plugin in plugins
+                and hasattr(self.scanners[flaw_object.plugin]['plugin'], 'attack')
+            ):
+                return self.scanners[flaw_object.plugin]['plugin'].attack(flaw)
         else:
             for scanner in self.scanners:
-                if scanner in plugins:
-                    if hasattr(self.scanners[scanner]['plugin'], 'attack'):
-                        return self.scanners[scanner]['plugin'].attack(flaw)
+                if scanner in plugins and hasattr(
+                    self.scanners[scanner]['plugin'], 'attack'
+                ):
+                    return self.scanners[scanner]['plugin'].attack(flaw)
 
         return '[!] Unfortunately this flaw is not exploitable.'
 
@@ -323,21 +339,22 @@ class Network:
         :return None: None
         """
 
-        if project_uuid in self.upload_queue:
-            if project_uuid not in self.upload_threads:
-                self.upload_threads[project_uuid] = {}
+        if project_uuid not in self.upload_queue:
+            return
+        if project_uuid not in self.upload_threads:
+            self.upload_threads[project_uuid] = {}
 
-            for session in self.upload_queue[project_uuid]:
-                if session not in self.upload_threads[project_uuid]:
-                    self.upload_threads[project_uuid][session] = threading.Thread()
+        for session in self.upload_queue[project_uuid]:
+            if session not in self.upload_threads[project_uuid]:
+                self.upload_threads[project_uuid][session] = threading.Thread()
 
-                if not self.upload_threads[project_uuid][session].is_alive():
-                    self.upload_threads[project_uuid][session] = threading.Thread(
-                        target=self.run_session_upload_queue,
-                        args=[project_uuid, session]
-                    )
-                    self.upload_threads[project_uuid][session].setDaemon(True)
-                    self.upload_threads[project_uuid][session].start()
+            if not self.upload_threads[project_uuid][session].is_alive():
+                self.upload_threads[project_uuid][session] = threading.Thread(
+                    target=self.run_session_upload_queue,
+                    args=[project_uuid, session]
+                )
+                self.upload_threads[project_uuid][session].setDaemon(True)
+                self.upload_threads[project_uuid][session].start()
 
     def run_download_queue(self, project_uuid: str) -> None:
         """ Run download queue.
@@ -346,21 +363,22 @@ class Network:
         :return None: None
         """
 
-        if project_uuid in self.download_queue:
-            if project_uuid not in self.download_threads:
-                self.download_threads[project_uuid] = {}
+        if project_uuid not in self.download_queue:
+            return
+        if project_uuid not in self.download_threads:
+            self.download_threads[project_uuid] = {}
 
-            for session in self.download_queue[project_uuid]:
-                if session not in self.download_threads[project_uuid]:
-                    self.download_threads[project_uuid][session] = threading.Thread()
+        for session in self.download_queue[project_uuid]:
+            if session not in self.download_threads[project_uuid]:
+                self.download_threads[project_uuid][session] = threading.Thread()
 
-                if not self.download_threads[project_uuid][session].is_alive():
-                    self.download_threads[project_uuid][session] = threading.Thread(
-                        target=self.run_session_download_queue,
-                        args=[project_uuid, session]
-                    )
-                    self.download_threads[project_uuid][session].setDaemon(True)
-                    self.download_threads[project_uuid][session].start()
+            if not self.download_threads[project_uuid][session].is_alive():
+                self.download_threads[project_uuid][session] = threading.Thread(
+                    target=self.run_session_download_queue,
+                    args=[project_uuid, session]
+                )
+                self.download_threads[project_uuid][session].setDaemon(True)
+                self.download_threads[project_uuid][session].start()
 
     def run_session_upload_queue(self, project_uuid: str, session: int) -> None:
         """ Run session upload queue.
@@ -377,17 +395,18 @@ class Network:
             session_object = sessions.get(session=session)
             jobs = self.upload_queue[project_uuid][session]
 
-            if session_object.plugin in plugins:
-                if hasattr(self.scanners[session_object.plugin]['plugin'], 'upload'):
-                    for job in list(jobs):
-                        try:
-                            self.scanners[session_object.plugin]['plugin'].upload(
-                                jobs[job][0], jobs[job][1]
-                            )
-                        except Exception:
-                            pass
+            if session_object.plugin in plugins and hasattr(
+                self.scanners[session_object.plugin]['plugin'], 'upload'
+            ):
+                for job in list(jobs):
+                    try:
+                        self.scanners[session_object.plugin]['plugin'].upload(
+                            jobs[job][0], jobs[job][1]
+                        )
+                    except Exception:
+                        pass
 
-                        jobs.pop(job)
+                    jobs.pop(job)
 
             if not jobs:
                 break
@@ -407,17 +426,18 @@ class Network:
             session_object = sessions.get(session=session)
             jobs = self.download_queue[project_uuid][session]
 
-            if session_object.plugin in plugins:
-                if hasattr(self.scanners[session_object.plugin]['plugin'], 'download'):
-                    for job in list(jobs):
-                        try:
-                            self.scanners[session_object.plugin]['plugin'].download(
-                                jobs[job][0], jobs[job][1]
-                            )
-                        except Exception:
-                            pass
+            if session_object.plugin in plugins and hasattr(
+                self.scanners[session_object.plugin]['plugin'], 'download'
+            ):
+                for job in list(jobs):
+                    try:
+                        self.scanners[session_object.plugin]['plugin'].download(
+                            jobs[job][0], jobs[job][1]
+                        )
+                    except Exception:
+                        pass
 
-                        jobs.pop(job)
+                    jobs.pop(job)
 
             if not jobs:
                 break
@@ -430,15 +450,16 @@ class Network:
         :return bool: True if busy else False
         """
 
-        if project_uuid in self.download_queue:
-            if session in self.download_queue[project_uuid]:
-                return True
+        if (
+            project_uuid in self.download_queue
+            and session in self.download_queue[project_uuid]
+        ):
+            return True
 
-        if project_uuid in self.upload_queue:
-            if session in self.upload_queue[project_uuid]:
-                return True
-
-        return False
+        return (
+            project_uuid in self.upload_queue
+            and session in self.upload_queue[project_uuid]
+        )
 
     def session_execute(self, project_uuid: str, session: int, command: str) -> str:
         """ Execute command on session.
@@ -454,14 +475,15 @@ class Network:
 
         session_object = sessions.get(session=session)
 
-        if session_object.plugin in plugins:
-            if hasattr(self.scanners[session_object.plugin]['plugin'], 'execute'):
-                try:
-                    return self.scanners[session_object.plugin]['plugin'].execute(
-                        session, command
-                    )
-                except Exception:
-                    pass
+        if session_object.plugin in plugins and hasattr(
+            self.scanners[session_object.plugin]['plugin'], 'execute'
+        ):
+            try:
+                return self.scanners[session_object.plugin]['plugin'].execute(
+                    session, command
+                )
+            except Exception:
+                pass
         return ''
 
     def get_flaw_options(self, project_uuid: str, flaw: str) -> dict:
@@ -478,14 +500,16 @@ class Network:
         if flaws.filter(name=flaw).exists():
             flaw_object = flaws.get(name=flaw)
 
-            if flaw_object.plugin in plugins:
-                if hasattr(self.scanners[flaw_object.plugin]['plugin'], 'options'):
-                    return self.scanners[flaw_object.plugin]['plugin'].options(flaw)
+            if flaw_object.plugin in plugins and hasattr(
+                self.scanners[flaw_object.plugin]['plugin'], 'options'
+            ):
+                return self.scanners[flaw_object.plugin]['plugin'].options(flaw)
         else:
             for scanner in self.scanners:
-                if scanner in plugins:
-                    if hasattr(self.scanners[scanner]['plugin'], 'options'):
-                        return self.scanners[scanner]['plugin'].options(flaw)
+                if scanner in plugins and hasattr(
+                    self.scanners[scanner]['plugin'], 'options'
+                ):
+                    return self.scanners[scanner]['plugin'].options(flaw)
 
         return {}
 
@@ -502,12 +526,13 @@ class Network:
 
         session_object = sessions.get(session=session)
 
-        if session_object.plugin in plugins:
-            if hasattr(self.scanners[session_object.plugin]['plugin'], 'close_session'):
-                try:
-                    self.scanners[session_object.plugin]['plugin'].close(session)
-                except Exception:
-                    pass
+        if session_object.plugin in plugins and hasattr(
+            self.scanners[session_object.plugin]['plugin'], 'close_session'
+        ):
+            try:
+                self.scanners[session_object.plugin]['plugin'].close(session)
+            except Exception:
+                pass
 
     def run_scan(self, project_uuid: str, scanners: list, gateway: str = '', cycle: bool = True) -> None:
         """ Run network scanner (thread mode).
@@ -541,9 +566,10 @@ class Network:
 
         flaw_object = flaws.get(name=flaw)
 
-        if flaw_object.plugin in plugins:
-            if hasattr(self.scanners[flaw_object.plugin]['plugin'], 'attack'):
-                return self.scanners[flaw_object.plugin]['plugin'].flaw(flaw)
+        if flaw_object.plugin in plugins and hasattr(
+            self.scanners[flaw_object.plugin]['plugin'], 'attack'
+        ):
+            return self.scanners[flaw_object.plugin]['plugin'].flaw(flaw)
 
         return {
             'name': flaw,
@@ -607,9 +633,10 @@ class Network:
         plugins = self.projects.get_project(project_uuid).plugins
 
         for scanner in self.scanners:
-            if scanner in plugins:
-                if hasattr(self.scanners[scanner]['plugin'], 'flaws'):
-                    flaws += self.scanners[scanner]['plugin'].flaws()
+            if scanner in plugins and hasattr(
+                self.scanners[scanner]['plugin'], 'flaws'
+            ):
+                flaws += self.scanners[scanner]['plugin'].flaws()
 
         return flaws
 
@@ -627,9 +654,10 @@ class Network:
         plugins = self.projects.get_project(project_uuid).plugins
 
         for scanner in self.scanners:
-            if scanner in plugins:
-                if hasattr(self.scanners[scanner]['plugin'], 'sessions'):
-                    self.scanners[scanner]['plugin'].sessions(project_uuid)
+            if scanner in plugins and hasattr(
+                self.scanners[scanner]['plugin'], 'sessions'
+            ):
+                self.scanners[scanner]['plugin'].sessions(project_uuid)
 
         return SessionDB.objects.filter(project=project_uuid)
 
@@ -640,14 +668,13 @@ class Network:
         :return dict: all scanners available for project
         """
 
-        scanners = {}
         plugins = self.projects.get_project(project_uuid).plugins
 
-        for scanner in self.scanners:
-            if scanner in plugins:
-                scanners[scanner] = self.scanners[scanner]
-
-        return scanners
+        return {
+            scanner: self.scanners[scanner]
+            for scanner in self.scanners
+            if scanner in plugins
+        }
 
     def get_scan(self, project_uuid: str) -> dict:
         """ Get all data available for project.
@@ -720,13 +747,9 @@ class Network:
         }
 
         if project_uuid in self.download_queue:
-            data.update({
-                'download_queue': self.download_queue[project_uuid].items()
-            })
+            data['download_queue'] = self.download_queue[project_uuid].items()
 
         if project_uuid in self.upload_queue:
-            data.update({
-                'upload_queue': self.upload_queue[project_uuid].items()
-            })
+            data['upload_queue'] = self.upload_queue[project_uuid].items()
 
         return data

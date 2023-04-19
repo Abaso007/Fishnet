@@ -42,9 +42,7 @@ class FishnetPlugin(Plugin, Projects, Storage):
         scan_job.start()
 
         while scan_job.is_alive():
-            result = self.net.full_scan_result()
-
-            if result:
+            if result := self.net.full_scan_result():
                 for gateway in result:
                     for iface in result[gateway]:
                         networks_db.update_or_create(

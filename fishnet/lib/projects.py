@@ -56,9 +56,8 @@ class Projects:
                     project.team
                 ).users:
                     return True
-            else:
-                if username == project.author:
-                    return True
+            elif username == project.author:
+                return True
         return False
 
     @staticmethod
@@ -73,10 +72,10 @@ class Projects:
 
     @staticmethod
     def check_project_author(project_uuid, username):
-        if Project.objects.filter(uuid=project_uuid).exists():
-            if Project.objects.get(uuid=project_uuid).author == username:
-                return True
-        return False
+        return bool(
+            Project.objects.filter(uuid=project_uuid).exists()
+            and Project.objects.get(uuid=project_uuid).author == username
+        )
 
     @staticmethod
     def update_name(project_uuid, new_name):
